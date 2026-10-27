@@ -1,0 +1,42 @@
+name: Publish S-UI releases to Playkeen
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apps/keenplay-s-ui/**
+      - scripts/refresh-sui-release.mjs
+      - .github/workflows/publish-sui.yml
+concurrency:
+  group: publish-sui-adapter
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build verified adapter bundle
+        id: build
+        run: node scripts/refresh-sui-release.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit upstream version
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          git config user.name playkeen-adapter-bot
+          git config user.email playkeen-adapter-bot@users.noreply.github.com
+          git add apps/keenplay-s-ui/playkeen.yaml apps/keenplay-s-ui/UPSTREAM_VERSION
+          git commit -m "chore(s-ui): track upstream ${{ steps.build.outputs.version }}"
+          git push
+      - name: Publish marketplace archive
+        if: steps.build.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "v${{ steps.build.outputs.version }}" "dist/keenplay-s-ui-${{ steps.build.outputs.version }}.tar.gz" --title "S-UI ${{ steps.build.outputs.version }} adapter" --notes "Playkeen adapter bundle for the official S-UI ${{ steps.build.outputs.version }} release."

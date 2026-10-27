@@ -14,10 +14,28 @@ old_version=$($SUI_BIN -v | awk '/S-UI Panel/{print $NF; exit}')
 [ -n "$old_version" ] || fail 'unable to detect the installed S-UI version.'
 backup_dir="$SUI_ROOT/cache/playkeen-adapter"
 mkdir -p "$backup_dir"
-trap 'rm -rf "$work"' EXIT HUP INT TERM
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+tag=$(tr -d '\r\n' < "$script_dir/../UPSTREAM_VERSION")
+case "$tag" in v[0-9]*) ;; *) fail 'adapter release has an invalid pinned S-UI version.' ;; esac
+service_was_running=0
+stopped=0
+swapped=0
+backup=""
+cleanup() {
+    result=$?
+    trap - EXIT HUP INT TERM
+    if [ "$result" -ne 0 ]; then
+        if [ "$swapped" -eq 1 ] && [ -n "$backup" ]; then cp -p "$backup" "$SUI_BIN"; fi
+        if [ "$service_was_running" -eq 1 ] && [ "$stopped" -eq 1 ]; then "$SERVICE" start playkeen-adapter >/dev/null 2>&1 || true; fi
+    fi
+    rm -rf "$work"
+    exit "$result"
+}
+trap cleanup EXIT HUP INT TERM
 
-curl -fsSL https://api.github.com/repos/alireza0/s-ui/releases/latest -o "$work/release.json"
-tag=$(jq -er '.tag_name' "$work/release.json")
+curl -fsSL "https://api.github.com/repos/alireza0/s-ui/releases/tags/$tag" -o "$work/release.json"
+release_tag=$(jq -er '.tag_name' "$work/release.json")
+[ "$release_tag" = "$tag" ] || fail 'official GitHub release tag does not match the adapter release.'
 asset=$(jq -cer '.assets[] | select(.name == "s-ui-linux-arm64.tar.gz")' "$work/release.json") || fail 'official release has no arm64 archive.'
 url=$(printf '%s' "$asset" | jq -er '.browser_download_url')
 digest=$(printf '%s' "$asset" | jq -er '.digest | select(startswith("sha256:")) | sub("^sha256:"; "")')
@@ -37,23 +55,23 @@ tar -xzf "$work/s-ui.tar.gz" -C "$work/extracted"
 new_bin=$(find "$work/extracted" -type f -name sui -print | head -n 1)
 [ -n "$new_bin" ] || fail 'official release archive does not contain the S-UI executable.'
 chmod 755 "$new_bin"
-"$new_bin" -v >/dev/null 2>&1 || fail 'new S-UI executable failed its version check.'
+new_version=$("$new_bin" -v 2>&1 | awk '/S-UI Panel/{print $NF; exit}')
+[ "$new_version" = "${tag#v}" ] || fail "downloaded S-UI version '$new_version' does not match '$tag'."
 
 backup="$backup_dir/sui.$old_version"
 cp -p "$SUI_BIN" "$backup"
-service_was_running=0
 if "$SERVICE" status >/dev/null 2>&1; then service_was_running=1; fi
-if [ "$service_was_running" -eq 1 ]; then "$SERVICE" stop playkeen-adapter; fi
+if [ "$service_was_running" -eq 1 ]; then "$SERVICE" stop playkeen-adapter; stopped=1; fi
 cp "$new_bin" "$SUI_BIN.playkeen-new"
 chmod 755 "$SUI_BIN.playkeen-new"
 mv -f "$SUI_BIN.playkeen-new" "$SUI_BIN"
+swapped=1
 
 if [ "$service_was_running" -eq 1 ]; then
-    if ! "$SERVICE" start playkeen-adapter; then
-        cp -p "$backup" "$SUI_BIN"
-        "$SERVICE" start playkeen-adapter || true
-        fail "S-UI $tag failed to start; restored version $old_version."
-    fi
+    "$SERVICE" start playkeen-adapter
+    sleep 1
+    "$SERVICE" status >/dev/null 2>&1 || fail "S-UI $tag failed to start; restoring version $old_version."
 fi
-
+printf '%s\n' "$backup" > "$backup_dir/last-update-backup"
+swapped=0
 printf 'Updated S-UI core to %s; database, certificates and configuration were preserved. Previous binary: %s\n' "$tag" "$backup"
