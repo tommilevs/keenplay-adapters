@@ -1,0 +1,11 @@
+schema: playkeen/v1
+id: keenplay-s-ui
+name: S-UI for Keenetic
+version: 0.2.0
+type: hybrid
+architectures: [arm64]
+install: app/install.sh
+update: app/update.sh
+remove: app/remove.sh
+status: app/status.sh
+description: Adopt and manage an existing Keenetic S-UI installation
