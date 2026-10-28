@@ -1,4 +1,4 @@
-schema: playkeen/v1
+schema: unixplay/v1
 id: keenplay-s-ui
 name: S-UI for Keenetic
 version: 1.6.6

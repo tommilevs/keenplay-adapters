@@ -9,7 +9,7 @@ const app=path.join(root,'apps','keenplay-s-ui');
 const manifestPath=path.join(app,'playkeen.yaml');
 const versionPath=path.join(app,'UPSTREAM_VERSION');
 const current=(await fs.readFile(versionPath,'utf8')).trim();
-const response=await fetch('https://api.github.com/repos/alireza0/s-ui/releases/latest',{headers:{'User-Agent':'KeenPlay-adapters','Accept':'application/vnd.github+json',...(process.env.GITHUB_TOKEN?{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`}:{})}});
+const response=await fetch('https://api.github.com/repos/alireza0/s-ui/releases/latest',{headers:{'User-Agent':'Unixplay-adapters','Accept':'application/vnd.github+json',...(process.env.GITHUB_TOKEN?{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`}:{})}});
 if(!response.ok)throw new Error(`Upstream GitHub API returned ${response.status}`);
 const release=await response.json();
 const asset=release.assets?.find(item=>item.name==='s-ui-linux-arm64.tar.gz');
@@ -18,7 +18,7 @@ if(!asset||!expected||!asset.browser_download_url?.startsWith('https://github.co
 const version=release.tag_name;
 const changed=version!==current;
 if(changed){
-  const archiveResponse=await fetch(asset.browser_download_url,{headers:{'User-Agent':'KeenPlay-adapters'}});
+  const archiveResponse=await fetch(asset.browser_download_url,{headers:{'User-Agent':'Unixplay-adapters'}});
   if(!archiveResponse.ok)throw new Error(`Upstream archive download returned ${archiveResponse.status}`);
   const bytes=Buffer.from(await archiveResponse.arrayBuffer());
   const actual=createHash('sha256').update(bytes).digest('hex');
